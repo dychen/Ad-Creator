@@ -13,17 +13,16 @@ def write_results_to_file(filename, results, num_followers):
 
 # Returns the user_ids of all followers of a specific user
 # Input:
-# user string of the user you want to find the followers of
+# id integer id of the user you want to find the followers of
 # Output:
 # array containing the list of user_ids of all followers for that user
-def get_followers(user):
+def get_followers(id):
     followers = []
-    base_url = 'http://api.twitter.com/1/followers/ids.json?&screen_name=%s&cursor=%s'
-    screen_name = user
+    base_url = 'http://api.twitter.com/1/followers/ids.json?&user_id=%s&cursor=%s'
     cursor = -1
     while (cursor != 0):
         try:
-            response = urllib2.urlopen(base_url % (screen_name, cursor))
+            response = urllib2.urlopen(base_url % (id, cursor))
         except urllib2.HTTPError, e:
             print 'Error: ' + str(e.code)
             break
@@ -111,28 +110,31 @@ def get_screen_name(id):
     return html[0]['screen_name']
 
 
-def calculate_correlations(friends, target_id, num_followers):
+def calculate_correlations(friends, followers, target_id):
     correlations = {}
-    target_num_followers = num_followers
     for friend in friends:
-        if 1.0 * friends[friend] / target_num_followers >= 0.3:
+        current_ratio = 1.0 * friends[friend] / len(followers)
+        if 1.0 * current_ratio >= 0.25 and current_ratio < 1.0:
             print 'calculate_correlations friend_id: ' + str(friend)
-            follower_ids = get_followers(get_screen_name(friend))
-            followers = create_followers_dict(follower_ids)
-            other_num_followers = len(followers)
-            count = 0
-            for follower in followers:
-                if target_id in followers:
-                    count += 1
-            ratio = 2.0 * (count + friends[friend]) / (target_num_followers + other_num_followers)
+            other_followers = get_followers(friend)
+            a = set(followers.keys())
+            b = set(other_followers)
+            ratio = 2.0 * len(a - (a - b)) / (len(a) + len(b))
             correlations[friend] = ratio
         else:
             print 'ratio too low, skipping calculation: ' + str(friend)
     return correlations
 
-import httplib
-proxy = '190.255.58.244:8080'
-connect = httplib.HTTPConnection(proxy, timeout=20)
+# import socks
+# import socket
+# proxy = '96.240.24.35'
+# port = 34089
+# type = socks.PROXY_TYPE_SOCKS5
+# socks.setdefaultproxy(type, proxy, port)
+# socket.socket = socks.socksocket
+
+# import httplib
+# connect = httplib.HTTPConnection(proxy, timeout=20)
 
 response = urllib2.urlopen('http://api.twitter.com/1/account/rate_limit_status.json')
 html = json.loads(response.read())
@@ -141,7 +143,7 @@ print str(html['remaining_hits']) + ' api calls left.'
 screen_name = 'coke'
 id = get_id(screen_name)
 print "Getting all followers of " + screen_name + "..."
-follower_ids = get_followers(screen_name)
+follower_ids = get_followers(id)
 print "Getting all friends of all followers..."
 followers = create_followers_dict(follower_ids)
 friends = {}
@@ -150,7 +152,8 @@ update_friends_dict(friends, followers)
 print "Writing to file..."
 write_results_to_file('results', friends, len(followers))
 print "Calculating correlations..."
-correlations = calculate_correlations(friends, id, len(followers))
+correlations = calculate_correlations(friends, followers, id)
+print "Writing to file..."
 write_results_to_file('correlations', correlations, len(correlations))
 
 print "Done."
