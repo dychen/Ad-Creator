@@ -11,6 +11,21 @@ def write_results_to_file(filename, results, num_followers):
         f.write(str(key) + ': ' + str(results[key]) + '\n')
     f.close()
 
+# Sends a GET request to twitter
+# Input:
+# url string of the url you want to hit
+# params string or tuple of the parameters you want to pass to the url
+# e.g. user_id, cursor
+# Output:
+# dictionary containing the parsed JSON response
+def call_twitter(url, params):
+    try:
+        response = urllib2.urlopen(url % params)
+    except urllib2.HTTPError, e:
+        print 'Error: ' str(e.code)
+        break
+    return json.loads(response.read())
+
 # Returns the user_ids of all followers of a specific user
 # Input:
 # id integer id of the user you want to find the followers of
@@ -109,7 +124,12 @@ def get_screen_name(id):
     html = json.loads(response.read())
     return html[0]['screen_name']
 
-
+# Calculates the correlations between the target brand and all other connected brands.
+# Input:
+# friends dictionary of (friend: count of number of followers with that friend) 
+# followers list of all follower ids of the target brand
+# Output:
+# dictionary of (other_brand_id: correlation between that brand and target brand) 
 def calculate_correlations(friends, followers, target_id):
     correlations = {}
     for friend in friends:
@@ -117,7 +137,7 @@ def calculate_correlations(friends, followers, target_id):
         if 1.0 * current_ratio >= 0.25 and current_ratio < 1.0:
             print 'calculate_correlations friend_id: ' + str(friend)
             other_followers = get_followers(friend)
-            a = set(followers.keys())
+            a = set(followers)
             b = set(other_followers)
             ratio = 2.0 * len(a - (a - b)) / (len(a) + len(b))
             correlations[friend] = ratio
@@ -152,7 +172,7 @@ update_friends_dict(friends, followers)
 print "Writing to file..."
 write_results_to_file('results', friends, len(followers))
 print "Calculating correlations..."
-correlations = calculate_correlations(friends, followers, id)
+correlations = calculate_correlations(friends, follower_ids, id)
 print "Writing to file..."
 write_results_to_file('correlations', correlations, len(correlations))
 
