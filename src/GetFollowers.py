@@ -22,8 +22,8 @@ def call_twitter(url, params):
     try:
         response = urllib2.urlopen(url % params)
     except urllib2.HTTPError, e:
-        print 'Error: ' str(e.code)
-        break
+        print 'Error: ' + str(e.code)
+        return
     return json.loads(response.read())
 
 # Returns the user_ids of all followers of a specific user
@@ -87,8 +87,8 @@ def create_followers_dict(follower_ids):
 # Output:
 # updated friends dictionary
 def update_friends_dict(friends, followers):
-    for follower in followers:
-        for friend in followers[follower]:
+    for follower, follower_friends in followers.items():
+        for friend in follower_friends:
             if friend not in friends:
                 friends[friend] = 1
             else:
@@ -132,8 +132,8 @@ def get_screen_name(id):
 # dictionary of (other_brand_id: correlation between that brand and target brand) 
 def calculate_correlations(friends, followers, target_id):
     correlations = {}
-    for friend in friends:
-        current_ratio = 1.0 * friends[friend] / len(followers)
+    for friend, count in friends.items():
+        current_ratio = 1.0 * count / len(followers)
         if 1.0 * current_ratio >= 0.25 and current_ratio < 1.0:
             print 'calculate_correlations friend_id: ' + str(friend)
             other_followers = get_followers(friend)
