@@ -3,9 +3,9 @@ import re
 import urllib2
 from multiprocessing import Process, Queue
 
-def call_proxy_list_site(url):
-    connect.request('GET', url)
-    return connect.getresponse().read()
+def call_proxy_list_site(url, connection):
+    connection.request('GET', url)
+    return connection.getresponse().read()
 
 def make_code_dictionary(contents):
     code = contents.split('//<![CDATA[')[1].split('//]]>')[0].strip()[:-1]
@@ -56,20 +56,29 @@ def parse_proxy_list(contents, port_codes):
 def check_proxy(proxy, protocol):
     print proxy + ': ' + protocol
     test_url = 'http://api.twitter.com/1/account/rate_limit_status.json'
-    proxies = {protocol: proxy}
-    proxy = urllib2.ProxyHandler(proxies)
-    opener = urllib2.build_opener(proxy)
+    proxies = {protocol: 'http://' + proxy}
+    proxy_handler = urllib2.ProxyHandler(proxies)
+    opener = urllib2.build_opener(proxy_handler)
     urllib2.install_opener(opener)
     try:
-        response = urllib2.urlopen(test_url)
+        response = urllib2.urlopen(test_url, timeout = 60)
         html = json.loads(response.read())
         if html['remaining_hits'] > 0:
-           print 'Accepted'
-           return True
-        return False
-    except:
+            print 'Accepted'
+            return True
+        else:
+            print 'Not enough calls remaining.'
+            return False
+    except Exception, e:
         return False
     return False
+
+def worker_proxy_check(input, output):
+    next_proxy = input.get()
+    proxy = next_proxy[0]
+    protocol = next_proxy[1]
+    if check_proxy(proxy, protocol):
+        output.put((proxy, protocol))
 
 if __name__ == '__main__':
     proxies = {}
@@ -86,19 +95,33 @@ if __name__ == '__main__':
                 '/free-list/anonymous-server-hide-ip-address/8#proxylist',
                 '/free-list/anonymous-server-hide-ip-address/9#proxylist']
 
-    connect = httplib.HTTPConnection(server)
+    connection = httplib.HTTPConnection(server)
     for url in url_list:
-        contents = call_proxy_list_site(url)
+        contents = call_proxy_list_site(url, connection)
         port_codes = make_code_dictionary(contents)
         proxies.update(parse_proxy_list(contents, port_codes))
 
-    clean_proxies = {}
+    unchecked_proxies = Queue()
+    checked_proxies = Queue()
+    for (proxy, protocol) in proxies.items():
+        unchecked_proxies.put((proxy, protocol))
+
+    procs = []
     for proxy, protocol in proxies.items():
-        p = Process(target = clean_proxy, args = (proxy, protocol))
-        jobs.append(p)
+        p = Process(target = worker_proxy_check, args = (unchecked_proxies, checked_proxies))
+        procs.append(p)
         p.start()
-        if check_proxy(proxy, protocol):
-            clean_proxies[proxy] = protocol
+
+    print "Waiting for workers to finish..."
+    for proc in procs:
+        proc.join()
+
+    clean_proxies = {}
+    while not checked_proxies.empty():
+        result = checked_proxies.get()
+        proxy = result[0]
+        protocol = result[1]
+        clean_proxies[proxy] = protocol
 
     print proxies
     print len(proxies)
